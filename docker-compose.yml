@@ -1,0 +1,94 @@
+version: '3.3'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    restart: unless-stopped
+    container_name: api
+    networks:
+      - traefik
+      - database
+    stdin_open: true
+    volumes:
+      - "./src:/app"
+
+  db:
+    image: mariadb:10.9.3
+    restart: unless-stopped
+    container_name: db
+    networks:
+      - database
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+
+  phpmyadmin:
+    image: phpmyadmin:5.2.0-fpm-alpine
+    restart: unless-stopped
+    container_name: phpmyadmin
+    networks:
+      - traefik
+      - database
+    environment:
+      PMA_ARBITRARY: 1
+    depends_on:
+      - db
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.phpmyadmin.entrypoints=web
+      - traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.localhost`)
+      - traefik.http.services.phpmyadmin.loadbalancer.server.port=8080
+      - traefik.docker.network=traefik_default
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ./docker/nginx/Dockerfile
+    restart: unless-stopped
+    container_name: nginx
+    networks:
+      - traefik
+    volumes:
+      - "./nginx/logs/app_access.log:/var/log/nginx/app_access.log"
+      - "./nginx/logs/app_error.log:/var/log/nginx/app_error.log"
+    depends_on:
+      - api
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nginx.entrypoints=web
+      - traefik.http.routers.nginx.rule=Host(`nginx.localhost`)
+      - traefik.http.services.nginx.loadbalancer.server.port=80
+      - traefik.docker.network=traefik_default
+
+  traefik:
+    image: traefik:v2.9
+    container_name: traefik
+    networks:
+      - traefik
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik:/etc/traefik"
+      - "./traefik/logs:/var/log/traefik"
+
+  whoami:
+    image: traefik/whoami
+    container_name: whoami
+    networks:
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.whoami.rule=Host(`whoami.localhost`)
+      - traefik.http.routers.whoami.entrypoints=web
+      - traefik.docker.network=traefik_default
+
+networks:
+  database:
+    external: false
+  traefik:
+    driver: bridge
+    name: traefik_default
