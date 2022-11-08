@@ -56,3 +56,6 @@
 
 # Nginx logs
 /nginx/logs/*
+
+node_modules
+.idea

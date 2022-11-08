@@ -1,0 +1,122 @@
+version: '3.3'
+
+services:
+  react-service:
+    build:
+      context: .
+      dockerfile: ./docker/node/Dockerfile
+    restart: unless-stopped
+    container_name: react-cnt
+    stdin_open: true
+    command: sh -c "yarn install && yarn dev"
+    working_dir: /app
+    ports:
+      - "3000:5000"
+    volumes:
+      - "./app/react:/app"
+
+  node-service:
+    build:
+      context: .
+      dockerfile: ./docker/node/Dockerfile
+    restart: unless-stopped
+    container_name: node-cnt
+    stdin_open: true
+    command: sh -c "yarn install && yarn start"
+    working_dir: /app
+    ports:
+      - "5000:5000"
+    volumes:
+      - "./app/node:/app"
+
+  symfony-service:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    restart: unless-stopped
+    container_name: symfony-cnt
+    networks:
+      - traefik
+      - database
+    stdin_open: true
+    volumes:
+      - "./app/symfony:/app"
+ 
+  nginx-service:
+    build:
+      context: .
+      dockerfile: ./docker/nginx/Dockerfile
+    restart: unless-stopped
+    container_name: nginx-cnt
+    networks:
+      - traefik
+    volumes:
+      - "./nginx/logs/app_access.log:/var/log/nginx/app_access.log"
+      - "./nginx/logs/app_error.log:/var/log/nginx/app_error.log"
+    depends_on:
+      - api
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nginx.entrypoints=web
+      - traefik.http.routers.nginx.rule=Host(`nginx.localhost`)
+      - traefik.http.services.nginx.loadbalancer.server.port=80
+      - traefik.docker.network=traefik_default
+
+  db-service:
+    image: mariadb:10.9.3
+    restart: unless-stopped
+    container_name: db-cnt
+    networks:
+      - database
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+
+  phpmyadmin:
+    image: phpmyadmin:5.2.0-fpm-alpine
+    restart: unless-stopped
+    container_name: pmd-cnt
+    networks:
+      - traefik
+      - database
+    environment:
+      PMA_ARBITRARY: 1
+    depends_on:
+      - db-service
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.phpmyadmin.entrypoints=web
+      - traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.localhost`)
+      - traefik.http.services.phpmyadmin.loadbalancer.server.port=8080
+      - traefik.docker.network=traefik_default
+
+  traefik-service:
+    image: traefik:v2.9
+    container_name: traefik-cnt
+    networks:
+      - traefik
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik:/etc/traefik"
+      - "./traefik/logs:/var/log/traefik"
+
+  whoami-service:
+    image: traefik/whoami
+    container_name: whoami-cnt
+    networks:
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.whoami.rule=Host(`whoami.localhost`)
+      - traefik.http.routers.whoami.entrypoints=web
+      - traefik.docker.network=traefik_default
+
+networks:
+  database:
+    external: false
+  traefik:
+    driver: bridge
+    name: traefik_default
