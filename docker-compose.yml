@@ -1,94 +1,117 @@
 version: '3.3'
 
 services:
-  api:
+  react-service:
     build:
       context: .
-      dockerfile: ./docker/api/Dockerfile
+      dockerfile: ./docker/node/Dockerfile
     restart: unless-stopped
-    container_name: api
-    networks:
-      - traefik
-      - database
+    container_name: react-cnt
+    stdin_open: true
+    command: sh -c "yarn install && yarn dev"
+    working_dir: /app
+    ports:
+      - "3000:5000"
+    volumes:
+      - "./app/react:/app"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.react.rule=Host(`react.docker-app.fr`)"
+      - "traefik.http.routers.react.entrypoints=web"
+
+  node-service:
+    build:
+      context: .
+      dockerfile: ./docker/node/Dockerfile
+    restart: unless-stopped
+    container_name: node-cnt
+    stdin_open: true
+    command: sh -c "yarn install && yarn start"
+    working_dir: /app
+    volumes:
+      - "./app/node:/app"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.node.rule=Host(`node.docker-app.fr`)"
+      - "traefik.http.routers.node.entrypoints=web"
+
+  php-service:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+    restart: unless-stopped
+    container_name: php-cnt
     stdin_open: true
     volumes:
-      - "./src:/app"
+      - "./app/symfony:/app"
+ 
+  nginx-service:
+    image: nginx:stable
+    restart: unless-stopped
+    container_name: nginx-cnt
+    volumes:
+      - "./app/symfony:/app"
+      - "./.conf/nginx/symfony.conf:/etc/nginx/conf.d/default.conf"
+      - "./.tmp/logs/nginx/app_access.log:/var/log/nginx/app_access.log"
+      - "./.tmp/logs/nginx/app_error.log:/var/log/nginx/app_error.log"
+    depends_on:
+      - php-service
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nginx.rule=Host(`symfony.docker-app.fr`)"
+      - "traefik.http.routers.nginx.entrypoints=web"
 
-  db:
+  db-service:
     image: mariadb:10.9.3
     restart: unless-stopped
-    container_name: db
-    networks:
-      - database
+    container_name: db-cnt
     environment:
       MARIADB_ROOT_PASSWORD: root
 
-  phpmyadmin:
-    image: phpmyadmin:5.2.0-fpm-alpine
+  pma-service:
+    image: phpmyadmin/phpmyadmin
     restart: unless-stopped
-    container_name: phpmyadmin
-    networks:
-      - traefik
-      - database
+    container_name: pma-cnt
     environment:
-      PMA_ARBITRARY: 1
+      PMA_HOST: db-service
     depends_on:
-      - db
+      - db-service
     labels:
-      - traefik.enable=true
-      - traefik.http.routers.phpmyadmin.entrypoints=web
-      - traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.localhost`)
-      - traefik.http.services.phpmyadmin.loadbalancer.server.port=8080
-      - traefik.docker.network=traefik_default
+      - "traefik.enable=true"
+      - "traefik.http.routers.pma.rule=Host(`pma.docker-app.fr`)"
+      - "traefik.http.routers.pma.entrypoints=web"
 
-  nginx:
-    build:
-      context: .
-      dockerfile: ./docker/nginx/Dockerfile
+  redis-service:
+    image: redis:7.0-alpine
     restart: unless-stopped
-    container_name: nginx
-    networks:
-      - traefik
-    volumes:
-      - "./nginx/logs/app_access.log:/var/log/nginx/app_access.log"
-      - "./nginx/logs/app_error.log:/var/log/nginx/app_error.log"
-    depends_on:
-      - api
+    command: redis-server --save 20 1 --loglevel warning --requirepass eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
+    volumes: 
+      - ./.tmp/cache/redis:/data
     labels:
-      - traefik.enable=true
-      - traefik.http.routers.nginx.entrypoints=web
-      - traefik.http.routers.nginx.rule=Host(`nginx.localhost`)
-      - traefik.http.services.nginx.loadbalancer.server.port=80
-      - traefik.docker.network=traefik_default
+      - "traefik.enable=true"
+      - "traefik.http.routers.redis.rule=Host(`redis.docker-app.fr`)"
+      - "traefik.http.routers.redis.entrypoints=web"
+
+  mailcatcher-service:
+    image: dockage/mailcatcher:0.8.2
+    restart: unless-stopped
+    container_name: mailcatcher-cnt
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mail.rule=Host(`mail.docker-app.fr`)"
+      - "traefik.http.routers.mail.entrypoints=web"
+      - "traefik.http.services.mail.loadbalancer.server.port=1080"
 
   traefik:
-    image: traefik:v2.9
-    container_name: traefik
-    networks:
-      - traefik
+    image: "traefik:v2.6"
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
     ports:
       - "80:80"
-      - "443:443"
       - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./traefik:/etc/traefik"
-      - "./traefik/logs:/var/log/traefik"
-
-  whoami:
-    image: traefik/whoami
-    container_name: whoami
-    networks:
-      - traefik
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.whoami.rule=Host(`whoami.localhost`)
-      - traefik.http.routers.whoami.entrypoints=web
-      - traefik.docker.network=traefik_default
-
-networks:
-  database:
-    external: false
-  traefik:
-    driver: bridge
-    name: traefik_default
