@@ -8,10 +8,12 @@ RUN apt update && \
     curl -sSL https://packages.sury.org/php/README.txt | bash -x && \
     apt update && \
     apt upgrade -y && \
-    apt install php8.2 php8.2-fpm php8.2-cli php8.2-dom -y && \
+    apt install php8.2 php8.2-fpm php8.2-cli php8.2-dom git -y && \
     mkdir /run/php
 
-COPY api/www.conf /etc/php/8.2/fpm/pool.d/www.conf
+COPY .conf/php/www.conf /etc/php/8.2/fpm/pool.d/www.conf
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 EXPOSE 9000
 
