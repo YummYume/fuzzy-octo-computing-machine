@@ -1,7 +1,7 @@
 version: '3.3'
 
 services:
-  react-service:
+  react:
     build:
       context: .
       dockerfile: ./docker/node/Dockerfile
@@ -19,7 +19,7 @@ services:
       - "traefik.http.routers.react.rule=Host(`react.docker-app.fr`)"
       - "traefik.http.routers.react.entrypoints=web"
 
-  node-service:
+  node:
     build:
       context: .
       dockerfile: ./docker/node/Dockerfile
@@ -35,7 +35,7 @@ services:
       - "traefik.http.routers.node.rule=Host(`node.docker-app.fr`)"
       - "traefik.http.routers.node.entrypoints=web"
 
-  php-service:
+  php:
     build:
       context: .
       dockerfile: ./docker/php/Dockerfile
@@ -44,8 +44,8 @@ services:
     stdin_open: true
     volumes:
       - "./app/symfony:/app"
- 
-  nginx-service:
+
+  nginx:
     image: nginx:stable
     restart: unless-stopped
     container_name: nginx-cnt
@@ -55,44 +55,44 @@ services:
       - "./.tmp/logs/nginx/app_access.log:/var/log/nginx/app_access.log"
       - "./.tmp/logs/nginx/app_error.log:/var/log/nginx/app_error.log"
     depends_on:
-      - php-service
+      - php
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nginx.rule=Host(`symfony.docker-app.fr`)"
       - "traefik.http.routers.nginx.entrypoints=web"
 
-  db-service:
+  db:
     image: mariadb:10.9.3
     restart: unless-stopped
     container_name: db-cnt
     environment:
-      MARIADB_ROOT_PASSWORD: root
+      MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD:?err}"
 
-  pma-service:
+  pma:
     image: phpmyadmin/phpmyadmin
     restart: unless-stopped
     container_name: pma-cnt
     environment:
-      PMA_HOST: db-service
+      PMA_HOST: db
     depends_on:
-      - db-service
+      - db
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pma.rule=Host(`pma.docker-app.fr`)"
       - "traefik.http.routers.pma.entrypoints=web"
 
-  redis-service:
+  redis:
     image: redis:7.0-alpine
     restart: unless-stopped
-    command: redis-server --save 20 1 --loglevel warning --requirepass eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
-    volumes: 
+    command: "redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_AUTH:?err}"
+    volumes:
       - ./.tmp/cache/redis:/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.redis.rule=Host(`redis.docker-app.fr`)"
       - "traefik.http.routers.redis.entrypoints=web"
 
-  mailcatcher-service:
+  mailcatcher:
     image: dockage/mailcatcher:0.8.2
     restart: unless-stopped
     container_name: mailcatcher-cnt
