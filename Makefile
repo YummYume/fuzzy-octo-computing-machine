@@ -40,5 +40,8 @@ db:
 	$(EXECPHP) php bin/console d:d:c --if-not-exists
 	$(EXECPHP) php bin/console d:s:u --force
 
+rabbitmq-consume:
+	$(EXECPHP) php bin/console messenger:consume -vv
+
 wait-for-db:
 	$(EXECPHP) php -r "set_time_limit(60);for(;;){if(@fsockopen(\"db\",3306)){break;}echo \"Waiting for DB\n\";sleep(1);}"

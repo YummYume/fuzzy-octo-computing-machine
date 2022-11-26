@@ -87,6 +87,7 @@ services:
     image: redis:7.0-alpine
     restart: unless-stopped
     command: "redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_AUTH:?err}"
+    container_name: redis-cnt
     volumes:
       - ./.tmp/cache/redis:/data
     labels:
@@ -103,6 +104,16 @@ services:
       - "traefik.http.routers.mail.rule=Host(`mail.docker-app.fr`)"
       - "traefik.http.routers.mail.entrypoints=web"
       - "traefik.http.services.mail.loadbalancer.server.port=1080"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    container_name: rabbitmq-cnt
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.docker-app.fr`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=web"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
 
   traefik:
     image: "traefik:v2.6"

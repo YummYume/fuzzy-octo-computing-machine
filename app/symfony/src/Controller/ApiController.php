@@ -4,11 +4,13 @@ namespace App\Controller;
 
 use App\Entity\Svelte;
 use App\Manager\RedisManager;
+use App\Message\EmailNotification;
 use App\Repository\SvelteRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\Routing\Annotation\Route;
 
@@ -18,8 +20,8 @@ final class ApiController extends AbstractController
     public function index(): Response
     {
         return new Response("
-            Hello, I\'m the Symfony API. Please check out my resources :
-            <a href=\"/redis\">/redis</a>, <a href=\"/db\">/db</a> and <a href=\"/mail\">/mail</a>.
+            Hello, I'm the Symfony API. Please check out my resources :
+            <a href=\"/redis\">/redis</a>, <a href=\"/db\">/db</a>, <a href=\"/mail\">/mail</a> and <a href=\"/rabbitmq\">/rabbitmq</a>.
         ");
     }
 
@@ -65,5 +67,18 @@ final class ApiController extends AbstractController
         $mailer->send($email);
 
         return new Response('Email sent!');
+    }
+
+    #[Route('/rabbitmq', name: 'app_rabbitmq')]
+    public function rabbitmq(MessageBusInterface $bus): Response
+    {
+        $bus->dispatch(new EmailNotification(
+            'Tema la taille du lapin!',
+            'Open me plz',
+            'the-prof@docker.com',
+            'legit@email.com'
+        ));
+
+        return new Response('Email queued via Rabbitmq!<br>Run "make rabbitmq-consume" to send the emails.');
     }
 }
