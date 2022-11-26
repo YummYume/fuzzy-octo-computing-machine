@@ -31,7 +31,7 @@ final class ApiController extends AbstractController
         $cacheDate = $redis->get('date');
 
         if (!$cacheDate) {
-            $redis->set('date', (new \DateTime())->format('d-m-Y H:i:s'), ['nx', 'ex' => 300]);
+            $redis->set('date', (new \DateTime())->format('m-d-Y H:i:s'), ['nx', 'ex' => 300]);
 
             return new Response('Nothing was found in the cache! Please refresh this page to see effect.');
         }
