@@ -10,4 +10,6 @@ RUN apk update && \
 
 EXPOSE 5000
 
+WORKDIR /app
+
 CMD ["node"]

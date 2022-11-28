@@ -1,30 +1,26 @@
 version: '3.3'
 
 services:
-  react-service:
-    build:
-      context: .
-      dockerfile: ./docker/node/Dockerfile
+  react:
+    image: yummyume/node-esgi:latest
     restart: unless-stopped
     container_name: react-cnt
     stdin_open: true
     command: sh -c "yarn install && yarn dev"
     working_dir: /app
-    ports:
-      - "3000:5000"
     volumes:
       - "./app/react:/app"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.react.rule=Host(`react.docker-app.fr`)"
       - "traefik.http.routers.react.entrypoints=web"
+      - "traefik.http.routers.react.tls.certresolver=resolver"
+      - "traefik.http.services.react.loadbalancer.server.port=5000"
 
-  node-service:
-    build:
-      context: .
-      dockerfile: ./docker/node/Dockerfile
+  express:
+    image: yummyume/node-esgi:latest
     restart: unless-stopped
-    container_name: node-cnt
+    container_name: express-cnt
     stdin_open: true
     command: sh -c "yarn install && yarn start"
     working_dir: /app
@@ -32,20 +28,25 @@ services:
       - "./app/node:/app"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.node.rule=Host(`node.docker-app.fr`)"
-      - "traefik.http.routers.node.entrypoints=web"
+      - "traefik.http.routers.express.rule=Host(`express.docker-app.fr`)"
+      - "traefik.http.routers.express.entrypoints=web"
+      - "traefik.http.routers.express.tls.certresolver=resolver"
+      - "traefik.http.services.express.loadbalancer.server.port=5000"
 
-  php-service:
-    build:
-      context: .
-      dockerfile: ./docker/php/Dockerfile
+  php:
+    image: yummyume/php-esgi:latest
     restart: unless-stopped
     container_name: php-cnt
     stdin_open: true
     volumes:
       - "./app/symfony:/app"
- 
-  nginx-service:
+    healthcheck:
+      test: [ "CMD", "php", "-v" ]
+      timeout: 30s
+      interval: 2s
+      retries: 30
+
+  nginx:
     image: nginx:stable
     restart: unless-stopped
     container_name: nginx-cnt
@@ -55,44 +56,68 @@ services:
       - "./.tmp/logs/nginx/app_access.log:/var/log/nginx/app_access.log"
       - "./.tmp/logs/nginx/app_error.log:/var/log/nginx/app_error.log"
     depends_on:
-      - php-service
+      php:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mailcatcher:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nginx.rule=Host(`symfony.docker-app.fr`)"
       - "traefik.http.routers.nginx.entrypoints=web"
+      - "traefik.http.routers.nginx.tls.certresolver=resolver"
+      - "traefik.http.services.nginx.loadbalancer.server.port=80"
 
-  db-service:
+  db:
     image: mariadb:10.9.3
     restart: unless-stopped
     container_name: db-cnt
     environment:
-      MARIADB_ROOT_PASSWORD: root
+      MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD:?err}"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 30s
+      interval: 2s
+      retries: 30
 
-  pma-service:
+  pma:
     image: phpmyadmin/phpmyadmin
     restart: unless-stopped
     container_name: pma-cnt
     environment:
-      PMA_HOST: db-service
+      PMA_HOST: db
     depends_on:
-      - db-service
+      db:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pma.rule=Host(`pma.docker-app.fr`)"
       - "traefik.http.routers.pma.entrypoints=web"
+      - "traefik.http.routers.pma.tls.certresolver=resolver"
+      - "traefik.http.services.pma.loadbalancer.server.port=8080"
 
-  redis-service:
+  redis:
     image: redis:7.0-alpine
     restart: unless-stopped
-    command: redis-server --save 20 1 --loglevel warning --requirepass eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
-    volumes: 
+    command: "redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_AUTH:?err}"
+    container_name: redis-cnt
+    volumes:
       - ./.tmp/cache/redis:/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.redis.rule=Host(`redis.docker-app.fr`)"
       - "traefik.http.routers.redis.entrypoints=web"
+      - "traefik.http.routers.redis.tls.certresolver=resolver"
+      - "traefik.http.services.redis.loadbalancer.server.port=6379"
 
-  mailcatcher-service:
+  mailcatcher:
     image: dockage/mailcatcher:0.8.2
     restart: unless-stopped
     container_name: mailcatcher-cnt
@@ -100,18 +125,34 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.mail.rule=Host(`mail.docker-app.fr`)"
       - "traefik.http.routers.mail.entrypoints=web"
+      - "traefik.http.routers.mail.tls.certresolver=resolver"
       - "traefik.http.services.mail.loadbalancer.server.port=1080"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    container_name: rabbitmq-cnt
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.docker-app.fr`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=web"
+      - "traefik.http.routers.rabbitmq.tls.certresolver=resolver"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
 
   traefik:
     image: "traefik:v2.6"
     command:
-      #- "--log.level=DEBUG"
+      - "--log.level=DEBUG"
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.address=:443"
+      - "--certificatesresolvers.resolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.resolver.acme.email=xXtraefikXx@esgi.com"
+      - "--certificatesresolvers.resolver.acme.storage=/letsencrypt/acme.json"
     ports:
-      - "80:80"
+      - "443:443"
       - "8080:8080"
     volumes:
+      - "./letsencrypt:/letsencrypt"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"

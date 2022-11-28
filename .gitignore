@@ -60,3 +60,6 @@
 node_modules
 .idea
 .tmp
+data/*
+!data/.gitkeep
+letsencrypt/
