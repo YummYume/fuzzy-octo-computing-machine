@@ -18,7 +18,9 @@ services:
       - "traefik.http.services.react.loadbalancer.server.port=5000"
 
   express:
-    image: yummyume/node-esgi:latest
+    build:
+      context: .
+      dockerfile: docker/node/Dockerfile
     restart: unless-stopped
     container_name: express-cnt
     stdin_open: true
@@ -26,15 +28,19 @@ services:
     working_dir: /app
     volumes:
       - "./app/node:/app"
+    environment:
+      - NODE_PORT=6000
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.express.rule=Host(`express.docker-app.fr`)"
       - "traefik.http.routers.express.entrypoints=web"
       - "traefik.http.routers.express.tls.certresolver=resolver"
-      - "traefik.http.services.express.loadbalancer.server.port=5000"
+      - "traefik.http.services.express.loadbalancer.server.port=6000"
 
   php:
-    image: yummyume/php-esgi:latest
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
     restart: unless-stopped
     container_name: php-cnt
     stdin_open: true
@@ -51,7 +57,7 @@ services:
     restart: unless-stopped
     container_name: nginx-cnt
     volumes:
-      - "./app/symfony:/app"
+      - "./app/symfony/public:/app/public"
       - "./.conf/nginx/symfony.conf:/etc/nginx/conf.d/default.conf"
       - "./.tmp/logs/nginx/app_access.log:/var/log/nginx/app_access.log"
       - "./.tmp/logs/nginx/app_error.log:/var/log/nginx/app_error.log"
