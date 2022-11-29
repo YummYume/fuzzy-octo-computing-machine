@@ -1,9 +1,13 @@
 COMPOSE=docker compose
-EXECAPI=$(COMPOSE) exec api
+EXECNODE=$(COMPOSE) exec node
+EXECPHP=$(COMPOSE) exec php
+EXECREACT=$(COMPOSE) exec react
 
 start:
 	$(COMPOSE) build --force-rm
 	$(COMPOSE) up -d --remove-orphans --force-recreate
+	make composer
+	make db
 
 up:
 	$(COMPOSE) up -d --remove-orphans
@@ -14,5 +18,31 @@ stop:
 down:
 	$(COMPOSE) down
 
-ssh:
-	$(EXECAPI) sh
+ssh-node:
+	$(EXECNODE) bash
+
+ssh-php:
+	$(EXECPHP) bash
+
+ssh-react:
+	$(EXECREACT) bash
+
+composer:
+	$(EXECPHP) composer install --ignore-platform-reqs
+
+db-drop:
+	$(EXECPHP) php bin/console d:d:d --if-exists --force
+	make db
+
+db:
+	$(EXECPHP) php bin/console d:d:c --if-not-exists
+	$(EXECPHP) php bin/console d:s:u --force
+
+rabbitmq-consume:
+	$(EXECPHP) php bin/console messenger:consume -vv
+
+healthcheck-db:
+	docker inspect --format "{{json .State.Health }}" db-cnt
+
+healthcheck-php:
+	docker inspect --format "{{json .State.Health }}" php-cnt
