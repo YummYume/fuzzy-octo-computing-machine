@@ -1,6 +1,7 @@
 FROM alpine:3.16
 
 ENV NODE_VERSION=16.18.0
+ENV NODE_PORT=5000
 
 RUN apk update && \
     apk add --no-cache curl && \
@@ -8,7 +9,7 @@ RUN apk update && \
     apk add nodejs npm && \
     npm install -g yarn
 
-EXPOSE 5000
+EXPOSE ${NODE_PORT}
 
 WORKDIR /app
 
